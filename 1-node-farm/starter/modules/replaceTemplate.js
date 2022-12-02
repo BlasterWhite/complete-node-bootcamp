@@ -7,10 +7,10 @@ module.exports = (template, product) => {
     output = output.replace(/{%PRODUCT_ORIGIN%}/g, product.from);
     output = output.replace(/{%PRODUCT_NUTRIENTS%}/g, product.nutrients);
     output = output.replace(/{%PRODUCT_DESCRIPTION%}/g, product.description);
-    if(!product.organic) {
+    if (!product.organic) {
         output = output.replace(/{%PRODUCT_NOT_ORGANIC%}/g, 'not-organic');
     } else {
         output = output.replace(/{%PRODUCT_NOT_ORGANIC%}/g, '');
     }
     return output;
-}
+};
