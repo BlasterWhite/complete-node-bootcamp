@@ -1,17 +1,22 @@
 const express = require('express');
+const morgan = require('morgan');
+
+const tourRouter = require('./routes/tourRoutes');
+const usersRouter = require('./routes/userRoutes');
 
 const app = express();
+// 1) MIDDLEWARE
+// For request.body
+app.use(morgan('dev'));
+app.use(express.json());
 
-app.get('/', (req, res) => {
-  res.status(200);
-  res.send('Hello !');
-});
+// 2) ROUTE HANDLER
 
-app.post('/', (req, res) => {
-  res.send('You can not post to this endpoint');
-});
+// USERS
 
-const port = 8000;
-app.listen(port, () => {
-  console.log(`App running on http://127.0.0.1:${port}`);
-});
+// 3) ROUTES
+
+app.use('/api/v1/tours', tourRouter);
+app.use('/api/v1/users', usersRouter);
+// 4) SERVER
+module.exports = app;
