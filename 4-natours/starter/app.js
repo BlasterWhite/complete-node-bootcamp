@@ -7,9 +7,12 @@ const usersRouter = require('./routes/userRoutes');
 const app = express();
 // 1) MIDDLEWARE
 // For request.body
-app.use(morgan('dev'));
 app.use(express.json());
-
+app.use(express.static(`${__dirname}/public`));
+if (process.env.NODE_ENV === 'development') {
+  console.log('Development MODE');
+  app.use(morgan('dev'));
+}
 // 2) ROUTE HANDLER
 
 // USERS
