@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const slugify = require('slugify');
 
 const tourSchema = mongoose.Schema(
   {
@@ -7,7 +8,10 @@ const tourSchema = mongoose.Schema(
       required: [true, 'A tour must have a name'],
       unique: true,
       trim: true,
+      maxlength: [40, 'A tour must have less then 40 caracters'],
+      minlength: [5, 'A tour must have more then 5 caracters'],
     },
+    slug: String,
     duration: {
       type: Number,
       required: [true, 'A tour must have a duration'],
@@ -19,11 +23,17 @@ const tourSchema = mongoose.Schema(
     difficulty: {
       type: String,
       required: [true, 'A tour must have a difficulty'],
+      enum: {
+        values: ['easy', 'medium', 'difficult'],
+        message: 'The value can only be: easy, medium, difficult',
+      },
     },
 
     ratingsAverage: {
       type: Number,
       default: 4.5,
+      min: [0, 'The minimum rating is 0'],
+      max: [5, 'The maximum rating is 5'],
     },
     ratingsQuantity: {
       type: Number,
@@ -33,7 +43,17 @@ const tourSchema = mongoose.Schema(
       type: Number,
       required: [true, 'A tour must have a price'],
     },
-    priceDiscount: Number,
+    priceDiscount: {
+      type: Number,
+      validate: {
+        // Only run a save and create
+        validator: function (value) {
+          return this.price > value;
+        },
+        message:
+          'The discount price can not be more than the normal price, {VALUE} >',
+      },
+    },
     summary: {
       type: String,
       trim: true,
@@ -54,6 +74,10 @@ const tourSchema = mongoose.Schema(
       select: false,
     },
     startDates: [Date],
+    secretTour: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     toJSON: { virtuals: true },
@@ -66,8 +90,28 @@ tourSchema.virtual('durationWeeks').get(function () {
 });
 
 // DOcument Middleware: runs on save and create
-tourSchema.pre('save', function () {
-  console.log(this);
+tourSchema.pre('save', function (next) {
+  // console.log(this); // Log the document right before is save in the DB
+  this.slug = slugify(this.name, { lower: true });
+  next();
+});
+
+// Document Middleware: runs at the end of save and create
+// tourSchema.post('save', function (doc, next) {
+//   next();
+// });
+
+// Query Middleware
+tourSchema.pre(/^find/, function (next) {
+  // All the string starting with 'find'
+  this.find({ secretTour: { $ne: true } }); /// This will never return a secretTour in any queries
+  next();
+});
+
+// Aggregate Middleware
+tourSchema.pre('aggregate', function (next) {
+  this.pipeline().unshift({ $match: { secretTour: { $ne: true } } });
+  next();
 });
 
 const Tour = mongoose.model('Tour', tourSchema);
