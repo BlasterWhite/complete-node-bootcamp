@@ -1,8 +1,9 @@
+const { promisify } = require('util');
 const jwt = require('jsonwebtoken');
 const User = require('../models/userModel');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
-const { token } = require('morgan');
+const sendEmail = require('../utils/email');
 
 const signToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -16,9 +17,10 @@ exports.signup = catchAsync(async (req, res, next) => {
     email: req.body.email,
     password: req.body.password,
     passwordConfirm: req.body.passwordConfirm,
+    passwordChangedAt: req.body.passwordChangedAt, // To Suppr
   });
 
-  token = signToken(newUser._id);
+  const token = signToken(newUser._id);
 
   res.status(201).json({
     status: 'success',
@@ -51,3 +53,84 @@ exports.login = catchAsync(async (req, res, next) => {
     token,
   });
 });
+
+// Middleware to require the JWT Token to pass
+exports.protect = catchAsync(async (req, res, next) => {
+  // 1) Get the token
+  let token;
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith('Bearer')
+  ) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (!token) {
+    return next(
+      new AppError('You are not logged in! Please log in to get access.', 401)
+    );
+  }
+
+  // 2) Verification Token
+
+  const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+  // 3) Check the user
+
+  const freshUser = await User.findById(decoded.id);
+  if (!freshUser) {
+    return next(new AppError('The user do not longer exist'));
+  }
+  // 4) Check if user change password after token was given
+  if (await freshUser.changePasswordAfter(decoded.iat))
+    return next(
+      new AppError('User has changed the password, please login again')
+    );
+
+  req.user = freshUser;
+  next();
+});
+
+exports.restrictTo = (...roles) => {
+  return (req, res, next) => {
+    if (roles.includes(req.user.role)) return next();
+    else
+      return next(
+        new AppError('The user do not have the permission to do that', 401)
+      );
+  };
+};
+
+exports.forgotPassword = catchAsync(async (req, res, next) => {
+  const user = await User.findOne({ email: req.body.email });
+  if (!user) {
+    return next(new AppError('There is no user with this email', 404));
+  }
+
+  const resetToken = user.createPasswordResetToken();
+  await user.save({ validateBeforeSave: false });
+
+  const resetURL = `${req.protocol}://${req.get(
+    'host'
+  )}/api/v1/users/resetPassword/${resetToken}`;
+
+  const message = `Forgot your password ? Submit a PATCH request with your new password and PasswordConfirm to: ${resetURL}\nIf you didn't forgot your password please ignore this email`;
+  try {
+    console.log('Sending Email');
+    await sendEmail({
+      message: message,
+      to: user.email,
+      subject: 'Password Reset (10min to reset)',
+    });
+    res.status(200).json({
+      status: 'success',
+      message: 'Token sent to email',
+    });
+  } catch (e) {
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+    await user.save({ validateBeforeSave: false });
+    return new AppError('There was an error sending the email, try later', 500);
+  }
+});
+
+exports.resetPassword = (req, res, next) => {};
